@@ -341,27 +341,28 @@ fn retransmit_shred(
 
     let mut retransmit_time = Measure::start("retransmit_to");
     let num_addrs = addrs.len();
-    let num_nodes = match cluster_nodes::get_broadcast_protocol(key) {
-        Protocol::QUIC => {
-            let shred = Bytes::copy_from_slice(shred);
-            addrs
-                .into_iter()
-                .filter_map(|addr| quic_endpoint_sender.try_send((addr, shred.clone())).ok())
-                .count()
-        }
-        Protocol::UDP => match multi_target_send(socket, shred, &addrs) {
-            Ok(()) => addrs.len(),
-            Err(SendPktsError::IoError(ioerr, num_failed)) => {
-                error!(
-                    "retransmit_to multi_target_send error: {:?}, {}/{} packets failed",
-                    ioerr,
-                    num_failed,
-                    addrs.len(),
-                );
-                addrs.len() - num_failed
-            }
-        },
-    };
+    let num_nodes = addrs.len();
+    // match cluster_nodes::get_broadcast_protocol(key) {
+    //     Protocol::QUIC => {
+    //         let shred = Bytes::copy_from_slice(shred);
+    //         addrs
+    //             .into_iter()
+    //             .filter_map(|addr| quic_endpoint_sender.try_send((addr, shred.clone())).ok())
+    //             .count()
+    //     }
+    //     Protocol::UDP => match multi_target_send(socket, shred, &addrs) {
+    //         Ok(()) => addrs.len(),
+    //         Err(SendPktsError::IoError(ioerr, num_failed)) => {
+    //             error!(
+    //                 "retransmit_to multi_target_send error: {:?}, {}/{} packets failed",
+    //                 ioerr,
+    //                 num_failed,
+    //                 addrs.len(),
+    //             );
+    //             addrs.len() - num_failed
+    //         }
+    //     },
+    // };
     retransmit_time.stop();
     stats
         .num_addrs_failed

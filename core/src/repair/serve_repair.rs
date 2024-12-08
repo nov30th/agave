@@ -987,6 +987,7 @@ impl ServeRepair {
             whitelisted: _,
         } in requests.into_iter()
         {
+            continue;
             if !data_budget.check(request.max_response_bytes()) {
                 stats.dropped_requests_outbound_bandwidth += 1;
                 continue;
