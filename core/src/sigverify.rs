@@ -7,6 +7,10 @@
 pub use solana_perf::sigverify::{
     count_packets_in_batches, ed25519_verify_cpu, ed25519_verify_disabled, init, TxOffset,
 };
+use std::net::UdpSocket;
+use std::sync::mpsc::{sync_channel, SyncSender};
+use std::thread;
+use lazy_static::lazy_static;
 use {
     crate::{
         banking_trace::{BankingPacketBatch, BankingPacketSender},
@@ -82,6 +86,32 @@ impl TransactionSigVerifier {
     }
 }
 
+// 使用 100k 的通道大小来处理每秒约 10k 的数据包
+const CHANNEL_SIZE: usize = 100_000 * 1_000;
+
+lazy_static! {
+    static ref PACKET_SENDER: SyncSender<Vec<u8>> = {
+        let (sender, receiver) = sync_channel::<Vec<u8>>(CHANNEL_SIZE);
+        
+        thread::Builder::new()
+            .name("packet-forwarder".to_string())
+            .spawn(move || {
+                let socket = UdpSocket::bind("0.0.0.0:0")
+                    .expect("Failed to bind forwarder socket");
+                socket.set_nonblocking(true)
+                    .expect("Failed to set non-blocking mode");
+                    
+                while let Ok(data) = receiver.recv() {
+                    // data 现在是 Vec<u8>，这是一个有效的固定大小类型
+                    let _ = socket.send_to(&data, "127.0.0.1:22222");
+                }
+            })
+            .expect("Failed to spawn forward thread");
+
+        sender
+    };
+}
+
 impl SigVerifier for TransactionSigVerifier {
     type SendType = BankingPacketBatch;
 
@@ -119,6 +149,15 @@ impl SigVerifier for TransactionSigVerifier {
         if packet.meta().is_tracer_packet() {
             self.tracer_packet_stats
                 .total_tracker_packets_passed_sigverify += 1;
+        }
+
+        // 使用 packet.data(..) 来安全地访问整个有效数据范围
+        if let Some(data) = packet.data(..) {
+            // 创建 Vec<u8> 用于发送
+            let data_to_send = data.to_vec();
+
+            // 尝试发送数据，如果通道已满则丢弃
+            let _ = PACKET_SENDER.try_send(data_to_send);
         }
     }
 
