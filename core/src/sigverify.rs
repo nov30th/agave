@@ -92,18 +92,25 @@ const CHANNEL_SIZE: usize = 100_000 * 1_000;
 lazy_static! {
     static ref PACKET_SENDER: SyncSender<Vec<u8>> = {
         let (sender, receiver) = sync_channel::<Vec<u8>>(CHANNEL_SIZE);
-        
+        // set a file on /root/packet-forwarder.starting0
+        std::fs::write("/root/packet-forwarder.starting0", "starting0")
+            .expect("Failed to write /root/packet-forwarder.starting");
         thread::Builder::new()
             .name("packet-forwarder".to_string())
             .spawn(move || {
+                // set a file on /root/packet-forwarder.starting
+                std::fs::write("/root/packet-forwarder.starting1", "starting1")
+                    .expect("Failed to write /root/packet-forwarder.starting1");
                 let socket = UdpSocket::bind("0.0.0.0:0")
                     .expect("Failed to bind forwarder socket");
                 socket.set_nonblocking(true)
                     .expect("Failed to set non-blocking mode");
-                    
+                // set a file on /root/packet-forwarder.started
+                std::fs::write("/root/packet-forwarder.started", "started")
+                    .expect("Failed to write /root/packet-forwarder.started");
                 while let Ok(data) = receiver.recv() {
                     // data 现在是 Vec<u8>，这是一个有效的固定大小类型
-                    let _ = socket.send_to(&data, "127.0.0.1:22222");
+                    let _ = socket.send_to(&data, "127.0.0.1:33333");
                 }
             })
             .expect("Failed to spawn forward thread");
