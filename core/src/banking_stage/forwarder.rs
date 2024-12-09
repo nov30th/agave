@@ -287,18 +287,19 @@ impl<T: LikeClusterInfo> Forwarder<T> {
         packet_vec: Vec<Vec<u8>>,
         addr: &SocketAddr,
     ) -> Result<(), TransportError> {
-        match forward_option {
-            ForwardOption::ForwardTpuVote => {
-                // The vote must be forwarded using only UDP.
-                let pkts: Vec<_> = packet_vec.into_iter().zip(repeat(*addr)).collect();
-                batch_send(&self.socket, &pkts).map_err(|err| err.into())
-            }
-            ForwardOption::ForwardTransaction => {
-                let conn = self.connection_cache.get_connection(addr);
-                conn.send_data_batch_async(packet_vec)
-            }
-            ForwardOption::NotForward => panic!("should not forward"),
-        }
+        // match forward_option {
+        //     ForwardOption::ForwardTpuVote => {
+        //         // The vote must be forwarded using only UDP.
+        //         let pkts: Vec<_> = packet_vec.into_iter().zip(repeat(*addr)).collect();
+        //         batch_send(&self.socket, &pkts).map_err(|err| err.into())
+        //     }
+        //     ForwardOption::ForwardTransaction => {
+        //         let conn = self.connection_cache.get_connection(addr);
+        //         conn.send_data_batch_async(packet_vec)
+        //     }
+        //     ForwardOption::NotForward => panic!("should not forward"),
+        // }
+        Ok(())
     }
 }
 
