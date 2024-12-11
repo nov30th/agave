@@ -47,7 +47,7 @@ members = [
     "genesis-utils",
     "geyser-plugin-interface",
     "geyser-plugin-manager",
-    "gossip",
+    "gossip", "hoho-recv",
     "inline-spl",
     "install",
     "keygen",

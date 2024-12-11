@@ -1,0 +1,18 @@
+[package]
+name = "hoho-recv"
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "hoho-recv"
+path = "src/main.rs"
