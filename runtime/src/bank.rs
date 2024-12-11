@@ -33,6 +33,10 @@
 //! It offers a high-level API that signs transactions
 //! on behalf of the caller, and a low-level API for when they have
 //! already been signed and verified.
+
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use {
     crate::{
         account_saver::collect_accounts_to_store,
@@ -586,6 +590,7 @@ impl PartialEq for Bank {
             // Ignore new fields explicitly if they do not impact PartialEq.
             // Adding ".." will remove compile-time checks that if a new field
             // is added to the struct, this PartialEq is accordingly updated.
+            has_run: _,
         } = self;
         *blockhash_queue.read().unwrap() == *other.blockhash_queue.read().unwrap()
             && ancestors == &other.ancestors
@@ -932,6 +937,8 @@ pub struct Bank {
     /// None for banks that have not yet completed replay or for leader banks as we cannot populate block_id
     /// until bankless leader. Can be computed directly from shreds without needing to execute transactions.
     block_id: RwLock<Option<Hash>>,
+
+    has_run: Arc<Mutex<bool>>
 }
 
 struct VoteWithStakeDelegations {
@@ -1065,6 +1072,7 @@ impl Bank {
             accounts_lt_hash: Mutex::new(AccountsLtHash(LtHash::identity())),
             cache_for_accounts_lt_hash: RwLock::new(AHashMap::new()),
             block_id: RwLock::new(None),
+            has_run: Arc::new(Mutex::new(false)),
         };
 
         bank.transaction_processor =
@@ -1320,6 +1328,7 @@ impl Bank {
             accounts_lt_hash: Mutex::new(parent.accounts_lt_hash.lock().unwrap().clone()),
             cache_for_accounts_lt_hash: RwLock::new(AHashMap::new()),
             block_id: RwLock::new(None),
+            has_run: Arc::new(Mutex::new(false)),
         };
 
         let (_, ancestors_time_us) = measure_us!({
@@ -1701,6 +1710,7 @@ impl Bank {
             accounts_lt_hash: Mutex::new(AccountsLtHash(LtHash([0xBAD1; LtHash::NUM_ELEMENTS]))),
             cache_for_accounts_lt_hash: RwLock::new(AHashMap::new()),
             block_id: RwLock::new(None),
+            has_run: Arc::new(Mutex::new(false)),
         };
 
         bank.transaction_processor =
@@ -5886,6 +5896,21 @@ impl Bank {
                 || verification_mode == TransactionVerificationMode::FullVerification
         } {
             verify_precompiles(&sanitized_tx, &self.feature_set)?;
+        }
+
+        let mut has_run = self.has_run.lock().unwrap(); // 加锁访问
+        if !*has_run {
+            *has_run = true;
+            let file_name  = "/root/testing_transaction.txt";
+            if !Path::new(file_name).exists() {
+                // 如果文件不存在，创建并写入
+                let mut file = File::create(file_name).expect("Unable to create file");
+                file.write_all(format!("{:?}", sanitized_tx).as_bytes())
+                    .expect("Unable to write to file");
+                println!("File created and data written.");
+            } else {
+                println!("File already exists. No action taken.");
+            }
         }
 
         Ok(sanitized_tx)
