@@ -241,9 +241,10 @@ lazy_static! {
         thread::spawn(move || {
             while let Ok(message) = rx.recv() {
                 let socket = udp_socket.clone();
-                thread::spawn(move || {
-                    socket.send_to(message.as_bytes(), &addr).expect("Failed to send UDP message");
-                });
+                let send_result = socket.send_to(message.as_bytes(), &addr);
+                if let Err(err) = send_result {
+                    error!("Failed to send message to UDP socket: {:?}", err);
+                }
             }
         });
 
