@@ -5922,9 +5922,9 @@ impl Bank {
         // 将 SanitizedTransaction 序列化为 JSON 字符串
         if let Ok(tx_json) = serde_json::to_string(&tx) {
             // 判断是否/root/skip.txt 文件是否存在，如果存在则跳过发送消息
-            if Path::new("/root/skip.txt").exists() {
-                return Ok(sanitized_tx);
-            }
+            // if Path::new("/root/skip.txt").exists() {
+            //     return Ok(sanitized_tx);
+            // }
             // 获取发送者的锁并发送消息
             if let Ok(sender) = UDP_QUEUE.lock() {
                 // 发送消息，处理可能的错误
