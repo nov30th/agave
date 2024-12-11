@@ -37,7 +37,6 @@
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc;
 use std::thread;
-use crossbeam_channel::unbounded;
 use {
     crate::{
         account_saver::collect_accounts_to_store,
@@ -226,29 +225,28 @@ struct VerifyAccountsHashConfig {
     store_hash_raw_data_for_debug: bool,
 }
 
+const QUEUE_CAPACITY: usize = 100 * 1024 * 1024; // 100 MB
+const MAX_MESSAGE_SIZE: usize = 2048; // 假设单条消息大小不超过 1 KB
+const WARN_THRESHOLD: usize = QUEUE_CAPACITY / MAX_MESSAGE_SIZE * 8 / 10; // 队列警告阈值（80%）
+
 lazy_static! {
-    static ref UDP_QUEUE: crossbeam_channel::Sender<String> = {
-        let (tx, rx) = unbounded::<String>();  // 或者使用 bounded() 设置容量
+    static ref UDP_QUEUE: Arc<Mutex<mpsc::Sender<String>>> = {
+        let (tx, rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel();
         let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
         let udp_socket = Arc::new(udp_socket);
         let addr: SocketAddr = "127.0.0.1:44444".parse().unwrap();
-        
-        let pool = ThreadPoolBuilder::new()
-            .num_threads(4)
-            .build()
-            .expect("Failed to create thread pool");
 
-        // 启动后台处理线程
+        // 启动发送线程
         thread::spawn(move || {
             while let Ok(message) = rx.recv() {
                 let socket = udp_socket.clone();
-                pool.spawn(move || {
+                thread::spawn(move || {
                     socket.send_to(message.as_bytes(), &addr).expect("Failed to send UDP message");
                 });
             }
         });
 
-        tx
+        Arc::new(Mutex::new(tx))
     };
 }
 
@@ -5922,8 +5920,13 @@ impl Bank {
         // 将 SanitizedTransaction 序列化为 JSON 字符串
         if let Ok(tx_json) = serde_json::to_string(&tx) {
             // 获取发送者的锁并发送消息
-            if let Err(e) = UDP_QUEUE.send(tx_json) {
-                eprintln!("Failed to send message: {}", e);
+            if let Ok(sender) = UDP_QUEUE.lock() {
+                // 发送消息，处理可能的错误
+                if let Err(e) = sender.send(tx_json) {
+                    eprintln!("Failed to send message: {}", e);
+                }
+            } else {
+                eprintln!("Failed to acquire lock on UDP_QUEUE");
             }
         } else {
             eprintln!("Failed to serialize transaction");
