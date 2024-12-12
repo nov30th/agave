@@ -10,6 +10,7 @@ edition.workspace = true
 [dependencies]
 solana-sdk = { workspace = true }
 bincode = { workspace = true }
+chrono = { workspace = true, features = ["default", "serde"] }
 
 [lints]
 workspace = true
