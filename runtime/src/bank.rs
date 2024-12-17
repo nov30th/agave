@@ -240,7 +240,30 @@ lazy_static! {
                 // 直接发送二进制数据
                 let send_result = socket.send_to(&bytes, &addr);
                 if let Err(err) = send_result {
-                    error!("Failed to send message to UDP socket: {:?}", err);
+                    error!("Failed to send message to UDP socket 44444: {:?}", err);
+                }
+            }
+        });
+
+        Arc::new(Mutex::new(tx))
+    };
+}
+
+lazy_static! {
+    static ref UDP_QUEUE1: Arc<Mutex<mpsc::Sender<Vec<u8>>>> = {
+        let (tx, rx): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+        let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
+        let udp_socket = Arc::new(udp_socket);
+        let addr: SocketAddr = "127.0.0.1:44445".parse().unwrap();
+
+        // 启动发送线程
+        thread::spawn(move || {
+            while let Ok(bytes) = rx.recv() {
+                let socket = udp_socket.clone();
+                // 直接发送二进制数据
+                let send_result = socket.send_to(&bytes, &addr);
+                if let Err(err) = send_result {
+                    error!("Failed to send message to UDP socket 44445: {:?}", err);
                 }
             }
         });
@@ -4114,7 +4137,7 @@ impl Bank {
                         RentDebits::default()
                     };
 
-                    Ok(CommittedTransaction {
+                    let result = CommittedTransaction {
                         status: execution_details.status,
                         log_messages: execution_details.log_messages,
                         inner_instructions: execution_details.inner_instructions,
@@ -4126,7 +4149,17 @@ impl Bank {
                             loaded_accounts_count: loaded_accounts.len(),
                             loaded_accounts_data_size,
                         },
-                    })
+                    };
+
+                    if let Ok(tx_bytes) = bincode::serialize(&result) {
+                        if let Ok(sender) = UDP_QUEUE.lock() {
+                            if let Err(e) = sender.send(tx_bytes) {
+                                eprintln!("Failed to send CommittedTransaction: {}", e);
+                            }
+                        }
+                    }
+
+                    Ok(result)
                 }
                 ProcessedTransaction::FeesOnly(fees_only_tx) => Ok(CommittedTransaction {
                     status: Err(fees_only_tx.load_error),
