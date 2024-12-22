@@ -80,7 +80,7 @@ fn analyze_swap_accounts_and_inner_instructions(
                     amount_bytes.copy_from_slice(&ix.data[1..9]);
                     u64::from_le_bytes(amount_bytes)
                 };
-0
+
                 println!("\nSwap Amount Details:");
                 // 对于SOL，需要除以1e9；对于其他代币，需要根据小数位数调整
                 println!("Amount In: {} (raw value: {})",
