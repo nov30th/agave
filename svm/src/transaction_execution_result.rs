@@ -11,7 +11,7 @@ use {
     std::{collections::HashMap, sync::Arc},
 };
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionLoadedAccountsStats {
     pub loaded_accounts_data_size: u32,
     pub loaded_accounts_count: usize,
