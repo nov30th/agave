@@ -4151,7 +4151,7 @@ impl Bank {
                         },
                     };
 
-                    if let Ok(tx_bytes) = bincode::serialize(&result) {
+                    if let Ok(tx_bytes) = bincode::serialize(&result.inner_instructions) {
                         if let Ok(sender) = UDP_QUEUE.lock() {
                             if let Err(e) = sender.send(tx_bytes) {
                                 eprintln!("Failed to send CommittedTransaction: {}", e);

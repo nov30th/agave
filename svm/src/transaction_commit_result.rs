@@ -8,7 +8,7 @@ use {
 
 pub type TransactionCommitResult = TransactionResult<CommittedTransaction>;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "dev-context-only-utils", derive(PartialEq))]
 pub struct CommittedTransaction {
     pub status: TransactionResult<()>,
