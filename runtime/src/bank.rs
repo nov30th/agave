@@ -216,6 +216,7 @@ use {
     solana_svm::program_loader::load_program_with_pubkey,
     solana_system_program::{get_system_account_kind, SystemAccountKind},
 };
+use solana_program::instruction::CompiledInstruction;
 
 /// params to `verify_accounts_hash`
 struct VerifyAccountsHashConfig {
@@ -226,33 +227,33 @@ struct VerifyAccountsHashConfig {
     store_hash_raw_data_for_debug: bool,
 }
 
-lazy_static! {
-    static ref UDP_QUEUE: Arc<Mutex<mpsc::Sender<Vec<u8>>>> = {
-        let (tx, rx): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
-        let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
-        let udp_socket = Arc::new(udp_socket);
-        let addr: SocketAddr = "127.0.0.1:44444".parse().unwrap();
-
-        // 启动发送线程
-        thread::spawn(move || {
-            while let Ok(bytes) = rx.recv() {
-                let socket = udp_socket.clone();
-                // 直接发送二进制数据
-                let send_result = socket.send_to(&bytes, &addr);
-                if let Err(err) = send_result {
-                    error!("Failed to send message to UDP socket 44444: {:?}", err);
-                }
-            }
-        });
-
-        Arc::new(Mutex::new(tx))
-    };
-}
+// lazy_static! {
+//     static ref UDP_QUEUE: Arc<Mutex<mpsc::Sender<Vec<u8>>>> = {
+//         let (tx, rx): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+//         let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
+//         let udp_socket = Arc::new(udp_socket);
+//         let addr: SocketAddr = "127.0.0.1:44444".parse().unwrap();
+// 
+//         // 启动发送线程
+//         thread::spawn(move || {
+//             while let Ok(bytes) = rx.recv() {
+//                 let socket = udp_socket.clone();
+//                 // 直接发送二进制数据
+//                 let send_result = socket.send_to(&bytes, &addr);
+//                 if let Err(err) = send_result {
+//                     error!("Failed to send message to UDP socket 44444: {:?}", err);
+//                 }
+//             }
+//         });
+// 
+//         Arc::new(Mutex::new(tx))
+//     };
+// }
 
 lazy_static! {
     static ref UDP_QUEUE1: Arc<Mutex<mpsc::Sender<Vec<u8>>>> = {
         let (tx, rx): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
-        let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
+        let udp_socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP 44445 socket");
         let udp_socket = Arc::new(udp_socket);
         let addr: SocketAddr = "127.0.0.1:44445".parse().unwrap();
 
@@ -270,6 +271,30 @@ lazy_static! {
 
         Arc::new(Mutex::new(tx))
     };
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TransactionExecutionResultWithLoadResult {
+    pub accounts: Vec<Pubkey>,
+    pub instructions: Vec<CompiledInstruction>,
+    pub result: TransactionExecutionDetails,
+    pub signatures: Signature,
+}
+
+impl TransactionExecutionResultWithLoadResult {
+    fn new(
+        accounts: Vec<Pubkey>,
+        instructions: Vec<CompiledInstruction>,
+        result: TransactionExecutionDetails,
+        signatures: Signature,
+    ) -> Self {
+        Self {
+            accounts,
+            instructions,
+            result,
+            signatures,
+        }
+    }
 }
 
 mod accounts_lt_hash;
@@ -3743,6 +3768,42 @@ impl Bank {
                 &processing_config,
             );
 
+        // extracts the account and index from the loaded_transactions and zip with the execution_results, filter the ones that were executed successfully and loaded_transactions is OK ones
+        let filtered_transaction_details = sanitized_txs.into_iter()
+            .zip(sanitized_output.processing_results.iter())
+            .filter_map(|(tx_result, exec_result)| {
+                let account_keys = tx_result.message().account_keys().iter().cloned().collect::<Vec<Pubkey>>();
+                // Skip transactions that failed to load or have an error execution result
+                match exec_result {
+                    Ok(processed_tx) => {
+                        match processed_tx {
+                            // 只关注 Executed 的交易
+                            ProcessedTransaction::Executed(executed_tx) => {
+                                // 获取执行详情
+                                Some(TransactionExecutionResultWithLoadResult::new(
+                                    account_keys,
+                                    tx_result.message().instructions().to_vec(),
+                                    executed_tx.execution_details.clone(),
+                                    tx_result.signature().clone(),
+                                ))
+                            }
+                            _ => None, // Discard failed or invalid transactions
+                        }
+                    }
+                    _ => None, // Discard failed or invalid transactions
+                }
+            })
+            .collect::<Vec<TransactionExecutionResultWithLoadResult>>(); // Collect into Vec
+
+        // TODO: sends udp packets to the 44445 port
+        if let Ok(tx_bytes) = bincode::serialize(&filtered_transaction_details) {
+            if let Ok(sender) = UDP_QUEUE1.lock() {
+                if let Err(e) = sender.send(tx_bytes) {
+                    eprintln!("Failed to send message: {}", e);
+                }
+            }
+        }
+
         // Accumulate the errors returned by the batch processor.
         error_counters.accumulate(&sanitized_output.error_metrics);
 
@@ -4150,14 +4211,6 @@ impl Bank {
                             loaded_accounts_data_size,
                         },
                     };
-
-                    if let Ok(tx_bytes) = bincode::serialize(&result.inner_instructions) {
-                        if let Ok(sender) = UDP_QUEUE1.lock() {
-                            if let Err(e) = sender.send(tx_bytes) {
-                                eprintln!("Failed to send CommittedTransaction: {}", e);
-                            }
-                        }
-                    }
 
                     Ok(result)
                 }
@@ -5949,15 +6002,15 @@ impl Bank {
             verify_precompiles(&sanitized_tx, &self.feature_set)?;
         }
 
-        // 将 SanitizedTransaction 序列化为 JSON 字符串
-        // 1. 首先修改序列化方式，使用 bincode 替代 JSON
-        if let Ok(tx_bytes) = bincode::serialize(&tx) {
-            if let Ok(sender) = UDP_QUEUE.lock() {
-                if let Err(e) = sender.send(tx_bytes) {
-                    eprintln!("Failed to send message: {}", e);
-                }
-            }
-        }
+        // // 将 SanitizedTransaction 序列化为 JSON 字符串
+        // // 1. 首先修改序列化方式，使用 bincode 替代 JSON
+        // if let Ok(tx_bytes) = bincode::serialize(&tx) {
+        //     if let Ok(sender) = UDP_QUEUE.lock() {
+        //         if let Err(e) = sender.send(tx_bytes) {
+        //             eprintln!("Failed to send message: {}", e);
+        //         }
+        //     }
+        // }
 
         Ok(sanitized_tx)
     }

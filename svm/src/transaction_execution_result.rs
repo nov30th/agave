@@ -1,3 +1,4 @@
+use serde_derive::{Deserialize, Serialize};
 // Re-exported since these have moved to `solana_sdk`.
 #[deprecated(
     since = "1.18.0",
@@ -30,7 +31,7 @@ impl ExecutedTransaction {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]  
 pub struct TransactionExecutionDetails {
     pub status: transaction::Result<()>,
     pub log_messages: Option<Vec<String>>,
