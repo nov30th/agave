@@ -97,6 +97,7 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 zstd = { workspace = true }
+zmq = { workspace = true }
 
 [lib]
 crate-type = ["lib"]

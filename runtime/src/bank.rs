@@ -38,6 +38,7 @@ use std::net::{SocketAddr, UdpSocket};
 use std::path::Path;
 use std::sync::mpsc;
 use std::thread;
+use zmq;
 use {
     crate::{
         account_saver::collect_accounts_to_store,
@@ -270,6 +271,15 @@ lazy_static! {
         });
 
         Arc::new(Mutex::new(tx))
+    };
+}
+
+lazy_static! {
+    static ref ZMQ_PUBLISHER: Arc<Mutex<zmq::Socket>> = {
+        let context = zmq::Context::new();
+        let publisher = context.socket(zmq::PUB).expect("Failed to create ZMQ PUB socket");
+        publisher.bind("tcp://127.0.0.1:54445").expect("Failed to bind ZMQ socket");
+        Arc::new(Mutex::new(publisher))
     };
 }
 
@@ -3798,8 +3808,14 @@ impl Bank {
         // TODO: sends udp packets to the 44445 port
         if let Ok(tx_bytes) = bincode::serialize(&filtered_transaction_details) {
             if let Ok(sender) = UDP_QUEUE1.lock() {
-                if let Err(e) = sender.send(tx_bytes) {
+                if let Err(e) = sender.send(tx_bytes.clone()) {
                     eprintln!("Failed to send message: {}", e);
+                }
+            }
+
+            if let Ok(publisher) = ZMQ_PUBLISHER.lock() {
+                if let Err(e) = publisher.send(&tx_bytes, 0) {
+                    error!("Failed to send message: {}", e);
                 }
             }
         }
