@@ -288,7 +288,7 @@ struct TransactionExecutionResultWithLoadResult {
     pub accounts: Vec<Pubkey>,
     pub instructions: Vec<CompiledInstruction>,
     pub result: TransactionExecutionDetails,
-    pub signatures: Vec<Signature>,
+    pub signatures: Signature,
 }
 
 impl TransactionExecutionResultWithLoadResult {
@@ -296,7 +296,7 @@ impl TransactionExecutionResultWithLoadResult {
         accounts: Vec<Pubkey>,
         instructions: Vec<CompiledInstruction>,
         result: TransactionExecutionDetails,
-        signatures: Vec<Signature>,
+        signatures: Signature,
     ) -> Self {
         Self {
             accounts,
@@ -3794,7 +3794,7 @@ impl Bank {
                                     account_keys,
                                     tx_result.message().instructions().to_vec(),
                                     executed_tx.execution_details.clone(),
-                                    tx_result.signatures().to_vec()
+                                    tx_result.signature().clone(),
                                 ))
                             }
                             _ => None, // Discard failed or invalid transactions
